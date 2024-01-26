@@ -1,5 +1,7 @@
-import requests
 import pandas as pd
+import requests
+
+from pubchem_api_crawler.utils import is_molecular_formula_input_valid
 
 
 class MolecularFormulaSearch:
@@ -23,9 +25,20 @@ class MolecularFormulaSearch:
         atoms: list[str],
         allow_other_elements: bool,
         properties: list[str] = None,
-        max_results: int = 50000,
-    ):
-        # todo: check list of atoms is valid format
+        max_results: int = 2000000,
+    ) -> str:
+        """
+        Get molecular formula search url
+
+        Args:
+            atoms (list[str]): molecular formula search input
+            allow_other_elements (bool): allow other elements
+            properties (list[str], optional): list of properties. Defaults to None.
+            max_results (int, optional): max results. Defaults to 2000000.
+
+        Returns:
+            str: _description_
+        """
         url = MolecularFormulaSearch.PUBCHEM_SEARCH_URL + "".join(atoms)
         if properties:
             url += "/property/" + ",".join(properties)
@@ -33,6 +46,7 @@ class MolecularFormulaSearch:
             url += "/cids"
 
         url += f"/JSON?AllowOtherElements={str(allow_other_elements).lower()}&MaxRecords={max_results}"
+        return url
 
     def search(
         self,
@@ -40,20 +54,32 @@ class MolecularFormulaSearch:
         allow_other_elements: bool = False,
         properties: list[str] = None,
         max_results: int = 2000000,
-    ):
+    ) -> pd.DataFrame | None:
         """
-        Faire une recherche par formule avec les atomes spécifiés. Renvoyer un df pandas avec les cids et les propriétés demandées.
+        Perform a fast molecular formula search using PubChem API.
+        See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Molecular-Formula
+        for a description of molecular formula search, and
+        https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf for
+        a description of valid molecular formal search inputs.
 
-        Description de l'api fastsearch https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Molecular-Formula
-        Syntaxe de la liste des atomes https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf
-        Liste des propriétés à request https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables
+        The search can retrieve a list of compound properties for each result.
+        If no properties are given, only cids are returned.
+        See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables
+        for a list of valid compound properties.
 
         Args:
-            atoms (list[str]): _description_
-            allow_other_elements (bool): _description_
-            properties (list[str]): _description_
-            max_results (int, optional): _description_. Defaults to 50000.
+            atoms (list[str]): molecular formula search input
+            allow_other_elements (bool): allow other elements than those specified in list of atoms
+            properties (list[str]): list of compound properties to retrieve
+            max_results (int, optional): max results. Defaults to 2000000.
+
+        Returns:
+            pd.DataFrame | None: a pandas DataFrame with search results; None if no results
         """
+        assert is_molecular_formula_input_valid(
+            atoms
+        ), "Invalid list of atom given. See https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf for valid molecular formula search inputs."
+
         url = self._get_request_url(
             atoms, allow_other_elements, properties, max_results
         )
