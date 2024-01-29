@@ -1,7 +1,11 @@
+import logging
+
 import pandas as pd
 import requests
 
 from pubchem_api_crawler.utils import is_molecular_formula_input_valid
+
+LOGGER = logging.getLogger(__name__)
 
 
 class MolecularFormulaSearch:
@@ -16,9 +20,6 @@ class MolecularFormulaSearch:
         "Accept-Language": "en-US,en;q=0.8",
         "Connection": "keep-alive",
     }
-
-    def __init__(self) -> None:
-        pass
 
     def _get_request_url(
         self,
@@ -84,9 +85,13 @@ class MolecularFormulaSearch:
             atoms, allow_other_elements, properties, max_results
         )
 
+        LOGGER.info(f"Exceuting Molecular Formula Search request: {url}")
         r = requests.get(url, headers=MolecularFormulaSearch.HEADERS)
         r.raise_for_status()
-        print(r.headers)
+        try:
+            LOGGER.info(r.headers["X-Throttling-Control"])
+        except KeyError:
+            pass
 
         results = r.json()
         if "IdentifierList" in results:
