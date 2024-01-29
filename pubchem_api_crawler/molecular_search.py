@@ -14,9 +14,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class MolecularFormulaSearch:
-    PUBCHEM_SEARCH_URL = (
-        "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/fastformula/"
-    )
+    PUBCHEM_SEARCH_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/"
     PUBCHEM_PUG_SEARCH_URL = "https://pubchem.ncbi.nlm.nih.gov/pug/pug.cgi"
     PUBCHEM_ENTREZ_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?retmode=text&rettype=uilist&WebEnvRq=1&db=pccompound&"
     HEADERS = {
@@ -47,7 +45,9 @@ class MolecularFormulaSearch:
         Returns:
             str: _description_
         """
-        url = MolecularFormulaSearch.PUBCHEM_SEARCH_URL + "".join(atoms)
+        url = (
+            MolecularFormulaSearch.PUBCHEM_SEARCH_URL + "fastformula/" + "".join(atoms)
+        )
         if properties:
             url += "/property/" + ",".join(properties)
         else:
@@ -113,6 +113,33 @@ class MolecularFormulaSearch:
 
         return None
 
+    def _get_properties_for_cids(
+        self, df: pd.DataFrame, properties: list[str], max_cids: int = 50000
+    ) -> pd.DataFrame:
+        total_cids = df.shape[0]
+        for property in properties:
+            if property not in df.columns:
+                df[property] = pd.NA
+        for i in range(0, total_cids, max_cids):
+            cids = df.iloc[i : min(i + max_cids, total_cids)].index.values
+            url = (
+                MolecularFormulaSearch.PUBCHEM_SEARCH_URL
+                + "cid/property/"
+                + ",".join(properties)
+                + "/JSON"
+            )
+            print("cid=" + ",".join(map(str, cids)))
+            r = requests.post(
+                url,
+                headers=MolecularFormulaSearch.HEADERS,
+                data="cid=" + ",".join(map(str, cids)),
+            )
+            r.raise_for_status()
+            results = r.json()
+            if "PropertyTable" in results and "Properties" in results["PropertyTable"]:
+                props = results["PropertyTable"]["Properties"]
+                df.update(pd.DataFrame(props).set_index("CID"))
+
     def _poll_query_results(
         self, query_id: str, poll_interval: int = 10
     ) -> _ElementTree:
@@ -133,7 +160,7 @@ class MolecularFormulaSearch:
         allow_other_elements: bool = False,
         properties: list[str] = None,
         max_results: int = 2000000,
-    ):
+    ) -> pd.DataFrame:
         # Build the Molecular Formula Search XML query for PUG
         query_data = "".join(atoms)
         pug_query = PUG_XML_MOL_SEARCH_QUERY.format(
