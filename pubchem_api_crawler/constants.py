@@ -168,3 +168,46 @@ COMPOUND_PROPERTIES = [
     "ConformerCount3D",
     "Fingerprint2D",
 ]
+
+PUG_XML_MOL_SEARCH_QUERY = """<PCT-Data>
+  <PCT-Data_input>
+    <PCT-InputData>
+      <PCT-InputData_query>
+        <PCT-Query>
+          <PCT-Query_type>
+            <PCT-QueryType>
+              <PCT-QueryType_css>
+                <PCT-QueryCompoundCS>
+                  <PCT-QueryCompoundCS_query>
+                    <PCT-QueryCompoundCS_query_data>{query_data}</PCT-QueryCompoundCS_query_data>
+                  </PCT-QueryCompoundCS_query>
+                  <PCT-QueryCompoundCS_type>
+                    <PCT-QueryCompoundCS_type_formula>
+                      <PCT-CSMolFormula>
+                        <PCT-CSMolFormula_allow-other value="{allow_other_elements}"/>
+                      </PCT-CSMolFormula>
+                    </PCT-QueryCompoundCS_type_formula>
+                  </PCT-QueryCompoundCS_type>
+                  <PCT-QueryCompoundCS_results>{max_results}</PCT-QueryCompoundCS_results>
+                </PCT-QueryCompoundCS>
+              </PCT-QueryType_css>
+            </PCT-QueryType>
+          </PCT-Query_type>
+        </PCT-Query>
+      </PCT-InputData_query>
+    </PCT-InputData>
+  </PCT-Data_input>
+</PCT-Data>"""
+
+PUG_XML_POLL_QUERY = """<PCT-Data>
+  <PCT-Data_input>
+    <PCT-InputData>
+      <PCT-InputData_request>
+        <PCT-Request>
+          <PCT-Request_reqid>{query_id}</PCT-Request_reqid>
+          <PCT-Request_type value="status"/>
+        </PCT-Request>
+      </PCT-InputData_request>
+    </PCT-InputData>
+  </PCT-Data_input>
+</PCT-Data>"""

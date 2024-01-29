@@ -1,8 +1,13 @@
 import logging
+import time
+import urllib.parse
 
 import pandas as pd
 import requests
+from lxml import etree
+from lxml.etree import _ElementTree
 
+from pubchem_api_crawler.constants import PUG_XML_MOL_SEARCH_QUERY, PUG_XML_POLL_QUERY
 from pubchem_api_crawler.utils import is_molecular_formula_input_valid
 
 LOGGER = logging.getLogger(__name__)
@@ -12,6 +17,8 @@ class MolecularFormulaSearch:
     PUBCHEM_SEARCH_URL = (
         "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/fastformula/"
     )
+    PUBCHEM_PUG_SEARCH_URL = "https://pubchem.ncbi.nlm.nih.gov/pug/pug.cgi"
+    PUBCHEM_ENTREZ_EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?retmode=text&rettype=uilist&WebEnvRq=1&db=pccompound&"
     HEADERS = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/99.0.4844.84 Safari/537.36",
         "Accept": "application/json",
@@ -105,3 +112,135 @@ class MolecularFormulaSearch:
             return df
 
         return None
+
+    def _poll_query_results(
+        self, query_id: str, poll_interval: int = 10
+    ) -> _ElementTree:
+        status = "queued"
+        pug_query = PUG_XML_POLL_QUERY.format(query_id=query_id)
+        while status == "queued" or status == "running":
+            time.sleep(poll_interval)
+            LOGGER.info(f"Checking status for query {query_id}.")
+            res = _pug_post_query(pug_query)
+            status = _get_pug_query_status(res)
+            LOGGER.info(f"Query {query_id} is {status}.")
+
+        return res, status
+
+    def _pug_search(
+        self,
+        atoms: list[str],
+        allow_other_elements: bool = False,
+        properties: list[str] = None,
+        max_results: int = 2000000,
+    ):
+        # Build the Molecular Formula Search XML query for PUG
+        query_data = "".join(atoms)
+        pug_query = PUG_XML_MOL_SEARCH_QUERY.format(
+            query_data=query_data,
+            max_results=max_results,
+            allow_other_elements=str(allow_other_elements).lower(),
+        )
+        res = _pug_post_query(pug_query)
+        status = _get_pug_query_status(res)
+
+        # PUG should respond with a "queued" response, containing a query id
+        # in which case we start polling for query status
+        if status == "queued":
+            query_id = _get_pug_query_id(res)
+            res, status = self._poll_query_results(query_id)
+
+        # Once polling is done, check query status
+        if status != "success":
+            LOGGER.error(f"Error while submitting query: {etree.tounicode(res)}")
+            return None
+
+        # Response should contain an entrez query key and webenv, which we can
+        # use to retrieve a list of cids for the results
+        query_key, webenv = _get_pug_entrez_key(res)
+        eutils_url = (
+            MolecularFormulaSearch.PUBCHEM_ENTREZ_EUTILS_URL
+            + urllib.parse.urlencode({"query_key": query_key, "WebEnv": webenv})
+        )
+        r = requests.get(eutils_url, headers=MolecularFormulaSearch.HEADERS)
+
+        cids = map(int, r.text.strip().split("\n"))
+        df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
+        return df
+
+
+def _pug_post_query(pug_query: str) -> _ElementTree:
+    """
+    Send a query to the PUG API. See
+    https://pubchem.ncbi.nlm.nih.gov/docs/power-user-gateway#section=Interacting-with-PUG
+
+    Args:
+        pug_query (str): the xml string query
+
+    Returns:
+        _ElementTree: the parsed xml response
+    """
+    LOGGER.debug(f"Sending PUG query {pug_query}")
+
+    r = requests.post(
+        MolecularFormulaSearch.PUBCHEM_PUG_SEARCH_URL,
+        headers=MolecularFormulaSearch.HEADERS,
+        data=pug_query,
+    )
+    r.raise_for_status()
+    res = etree.fromstring(r.text)
+
+    LOGGER.debug(f"Received {etree.tounicode(res)}")
+    return res
+
+
+def _get_pug_query_status(response: _ElementTree) -> str | None:
+    """
+    Extract query status from PUG XML response
+
+    Args:
+        response (_ElementTree): the XML response
+
+    Returns:
+        str | None: the status
+    """
+    status = response.find(".//PCT-Status")
+    if status is None:
+        return None
+
+    return status.attrib["value"]
+
+
+def _get_pug_query_id(response: _ElementTree) -> str | None:
+    """
+    Extract query id from PUG XML response
+
+    Args:
+        response (_ElementTree): the XML response
+
+    Returns:
+        str | None: the query id
+    """
+    id = response.find(".//PCT-Waiting_reqid")
+    if id is None:
+        return None
+
+    return id.text
+
+
+def _get_pug_entrez_key(response: _ElementTree) -> tuple[str, str] | None:
+    """
+    Extract entrez query key and webenv from PUG XML response
+
+    Args:
+        response (_ElementTree): the XML response
+
+    Returns:
+        tuple[str, str] | None: the query key and webenv
+    """
+    key = response.find(".//PCT-Entrez_query-key")
+    webenv = response.find(".//PCT-Entrez_webenv")
+    if key is None or webenv is None:
+        return None
+
+    return key.text, webenv.text
