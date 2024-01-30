@@ -1,6 +1,7 @@
 import logging
 import time
 import urllib.parse
+from typing import Any
 
 import pandas as pd
 import requests
@@ -28,81 +29,6 @@ class MolecularFormulaSearch:
         "Connection": "keep-alive",
     }
 
-    def _get_request_url(
-        self,
-        atoms: list[str],
-        allow_other_elements: bool,
-        properties: list[str] = None,
-        max_results: int = 2000000,
-    ) -> str:
-        """
-        Get molecular formula search url
-
-        Args:
-            atoms (list[str]): molecular formula search input
-            allow_other_elements (bool): allow other elements
-            properties (list[str], optional): list of properties. Defaults to None.
-            max_results (int, optional): max results. Defaults to 2000000.
-
-        Returns:
-            str: _description_
-        """
-        url = (
-            MolecularFormulaSearch.PUBCHEM_SEARCH_URL + "fastformula/" + "".join(atoms)
-        )
-        if properties:
-            url += "/property/" + ",".join(properties)
-        else:
-            url += "/cids"
-
-        url += f"/JSON?AllowOtherElements={str(allow_other_elements).lower()}&MaxRecords={max_results}"
-        return url
-
-    def _rest_api_search(
-        self,
-        atoms: list[str],
-        allow_other_elements: bool = False,
-        properties: list[str] = None,
-        max_results: int = 2000000,
-    ) -> pd.DataFrame | None:
-        """
-        Perform molecular formula search using REST API.
-        https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Molecular-Formula
-
-        Args:
-            atoms (list[str]): molecular formula search input
-            allow_other_elements (bool): allow other elements than those specified in list of atoms
-            properties (list[str]): list of compound properties to retrieve
-            max_results (int, optional): max results. Defaults to 2000000.
-
-        Returns:
-            pd.DataFrame: a pandas DataFrame with search results
-        """
-        url = self._get_request_url(
-            atoms, allow_other_elements, properties, max_results
-        )
-
-        LOGGER.info(f"Exceuting Molecular Formula Search request: {url}")
-        r = requests.get(url, headers=MolecularFormulaSearch.HEADERS)
-        r.raise_for_status()
-        try:
-            LOGGER.info(r.headers["X-Throttling-Control"])
-        except KeyError:
-            pass
-
-        results = r.json()
-        if "IdentifierList" in results:
-            cids = results["IdentifierList"]["CID"]
-            df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
-            return df
-
-        if "PropertyTable" in results and "Properties" in results["PropertyTable"]:
-            props = results["PropertyTable"]["Properties"]
-            df = pd.DataFrame(props).set_index("CID")
-            return df
-
-        return None
-
     def search(
         self,
         atoms: list[str],
@@ -110,6 +36,7 @@ class MolecularFormulaSearch:
         properties: list[str] = None,
         max_results: int = 2000000,
         pug_xml: bool = False,
+        _async: bool = True,
     ) -> pd.DataFrame | None:
         """
         Perform a fast molecular formula search using PubChem API.
@@ -142,6 +69,11 @@ class MolecularFormulaSearch:
                 atoms, allow_other_elements, properties, max_results
             )
 
+        elif _async:
+            return self._async_search(
+                atoms, allow_other_elements, properties, max_results
+            )
+
         try:
             return self._rest_api_search(
                 atoms, allow_other_elements, properties, max_results
@@ -152,6 +84,92 @@ class MolecularFormulaSearch:
                     "Timeout error for REST API Molecular Search Query. You should try using the PUG XML API with pug_xml=True."
                 )
             raise exc
+
+    def _rest_api_search(
+        self,
+        atoms: list[str],
+        allow_other_elements: bool,
+        properties: list[str] | None,
+        max_results: int,
+    ) -> pd.DataFrame | None:
+        """
+        Perform molecular formula search using REST API.
+        https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Molecular-Formula
+
+        Args:
+            atoms (list[str]): molecular formula search input
+            allow_other_elements (bool): allow other elements than those specified in list of atoms
+            properties (list[str]): list of compound properties to retrieve
+            max_results (int, optional): max results. Defaults to 2000000.
+
+        Returns:
+            pd.DataFrame: a pandas DataFrame with search results
+        """
+        url = _get_rest_query_url(
+            atoms, allow_other_elements, properties, max_results, False
+        )
+        results = _send_rest_query(url)
+
+        if "IdentifierList" in results:
+            cids = results["IdentifierList"]["CID"]
+            df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
+            return df
+
+        if "PropertyTable" in results and "Properties" in results["PropertyTable"]:
+            props = results["PropertyTable"]["Properties"]
+            df = pd.DataFrame(props).set_index("CID")
+            return df
+
+        return None
+
+    def _async_search(
+        self,
+        atoms: list[str],
+        allow_other_elements: bool,
+        properties: list[str] | None,
+        max_results: int,
+        max_query_results: int = 100000,
+    ):
+        url = _get_rest_query_url(
+            atoms, allow_other_elements, properties, max_results, True
+        )
+        result = _send_rest_query(url)
+        try:
+            listkey = result["Waiting"]["ListKey"]
+        except KeyError:
+            LOGGER.error(
+                f"An error occured while submitting Async Molecular Formula Search request: {result}"
+            )
+            return None
+
+        results = _poll_async_query_results(listkey, properties)
+
+        LOGGER.info("Retrieving async search results.")
+        values = []
+        for i in tqdm(range(0, max_results, max_query_results)):
+            url = _get_rest_polling_url(
+                listkey, properties, results_start=i, max_results=max_query_results
+            )
+            results = _send_rest_query(url)
+            if "IdentifierList" in results:
+                cids = results["IdentifierList"]["CID"]
+                values.extend(cids)
+            elif (
+                "PropertyTable" in results and "Properties" in results["PropertyTable"]
+            ):
+                props = results["PropertyTable"]["Properties"]
+                values.extend(props)
+            else:
+                break
+
+        if values:
+            if properties:
+                df = pd.DataFrame(values).set_index("CID")
+            else:
+                df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
+            return df
+
+        return None
 
     def _get_properties_for_cids(
         self, df: pd.DataFrame, properties: list[str], max_cids: int = 100000
@@ -256,6 +274,104 @@ class MolecularFormulaSearch:
             self._get_properties_for_cids(df, properties)
 
         return df
+
+
+def _get_rest_query_url(
+    atoms: list[str],
+    allow_other_elements: bool,
+    properties: list[str] = None,
+    max_results: int = 2000000,
+    _async: bool = False,
+) -> str:
+    """
+    Get molecular formula search query url
+
+    Args:
+        atoms (list[str]): molecular formula search input
+        allow_other_elements (bool): allow other elements
+        properties (list[str], optional): list of properties. Defaults to None.
+        max_results (int, optional): max results. Defaults to 2000000.
+
+    Returns:
+        str: _description_
+    """
+    url = MolecularFormulaSearch.PUBCHEM_SEARCH_URL
+    if _async:
+        url += "formula/"
+    else:
+        url += "fastformula/"
+
+    url += "".join(atoms)
+
+    if properties:
+        url += "/property/" + ",".join(properties)
+    else:
+        url += "/cids"
+
+    url += f"/JSON?AllowOtherElements={str(allow_other_elements).lower()}&MaxRecords={max_results}"
+    return url
+
+
+def _get_rest_polling_url(
+    listkey: str,
+    properties: list[str] | None,
+    results_start: int | None = None,
+    max_results: int | None = None,
+) -> str:
+    """
+    Get molecular formula search polling url
+
+    Args:
+        properties (list[str], optional): list of properties. Defaults to None.
+
+    Returns:
+        str: _description_
+    """
+    url = MolecularFormulaSearch.PUBCHEM_SEARCH_URL + "listkey/" + listkey
+
+    if properties:
+        url += "/property/" + ",".join(properties)
+    else:
+        url += "/cids"
+
+    url += f"/JSON"
+
+    params = {}
+    if max_results:
+        params["listkey_count"] = max_results
+    if results_start:
+        params["listkey_start"] = results_start
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+
+    return url
+
+
+def _send_rest_query(url: str) -> dict[str, Any]:
+    LOGGER.info(f"Executing Molecular Formula Search query: {url}")
+    r = requests.get(url, headers=MolecularFormulaSearch.HEADERS)
+    r.raise_for_status()
+    try:
+        LOGGER.info(r.headers["X-Throttling-Control"])
+    except KeyError:
+        pass
+    return r.json()
+
+
+def _poll_async_query_results(
+    listkey: str, properties: list[str] | None, poll_interval: int = 10
+):
+    waiting = True
+    url = _get_rest_polling_url(listkey, properties, max_results=2)
+    while waiting:
+        time.sleep(poll_interval)
+        LOGGER.info(f"Checking status for query {listkey}.")
+        result = _send_rest_query(url)
+        waiting = "Waiting" in result
+        if waiting:
+            LOGGER.info("Query is still running.")
+
+    return result
 
 
 def _poll_query_results(
