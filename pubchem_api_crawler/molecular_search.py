@@ -1,13 +1,12 @@
 import logging
 import time
 import urllib.parse
-from typing import Any
 
 import pandas as pd
-import requests
 from requests import HTTPError
 from tqdm import tqdm
 
+from pubchem_api_crawler.rest_api import _send_rest_query
 from pubchem_api_crawler.utils import is_molecular_formula_input_valid
 
 LOGGER = logging.getLogger(__name__)
@@ -214,26 +213,6 @@ def _get_rest_polling_url(
         url += "?" + urllib.parse.urlencode(params)
 
     return url
-
-
-def _send_rest_query(url: str) -> dict[str, Any]:
-    """
-    Send REST API query
-
-    Args:
-        url (str): the query url
-
-    Returns:
-        dict[str, Any]: the query JSON response
-    """
-    LOGGER.debug(f"Query url: {url}")
-    r = requests.get(url, headers=MolecularFormulaSearch.HEADERS)
-    r.raise_for_status()
-    try:
-        LOGGER.debug(r.headers["X-Throttling-Control"])
-    except KeyError:
-        pass
-    return r.json()
 
 
 def _poll_async_query_results(listkey: str, poll_interval: int = 10):
