@@ -30,7 +30,7 @@ class MolecularFormulaSearch:
         allow_other_elements: bool = False,
         properties: list[str] = None,
         max_results: int = 2000000,
-        _async: bool = True,
+        _async: bool = False,
     ) -> pd.DataFrame | None:
         """
         Perform a fast molecular formula search using PubChem API.
@@ -97,6 +97,7 @@ class MolecularFormulaSearch:
         url = _get_rest_query_url(
             atoms, allow_other_elements, properties, max_results, False
         )
+        LOGGER.info("Executing Molecular Formula Search query")
         results = _send_rest_query(url)
 
         if "IdentifierList" in results:
@@ -117,11 +118,12 @@ class MolecularFormulaSearch:
         allow_other_elements: bool,
         properties: list[str] | None,
         max_results: int,
-        max_query_results: int = 100000,
+        max_query_results: int = 50000,
     ):
         url = _get_rest_query_url(
             atoms, allow_other_elements, properties, max_results, True
         )
+        LOGGER.info("Executing Molecular Formula Async Search query")
         result = _send_rest_query(url)
         try:
             listkey = result["Waiting"]["ListKey"]
@@ -131,34 +133,12 @@ class MolecularFormulaSearch:
             )
             return None
 
-        results = _poll_async_query_results(listkey)
+        poll_results = _poll_async_query_results(listkey)
+        LOGGER.debug(f"Polling results: {poll_results}")
 
-        LOGGER.info("Retrieving async search results.")
-        values = []
-        for i in tqdm(range(0, max_results, max_query_results)):
-            url = _get_rest_polling_url(
-                listkey, properties, results_start=i, max_results=max_query_results
-            )
-            results = _send_rest_query(url)
-            if "IdentifierList" in results:
-                cids = results["IdentifierList"]["CID"]
-                values.extend(cids)
-            elif (
-                "PropertyTable" in results and "Properties" in results["PropertyTable"]
-            ):
-                props = results["PropertyTable"]["Properties"]
-                values.extend(props)
-            else:
-                break
-
-        if values:
-            if properties:
-                df = pd.DataFrame(values).set_index("CID")
-            else:
-                df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
-            return df
-
-        return None
+        return _retrieve_async_query_results(
+            listkey, properties, max_results, max_query_results
+        )
 
 
 def _get_rest_query_url(
@@ -246,7 +226,7 @@ def _send_rest_query(url: str) -> dict[str, Any]:
     Returns:
         dict[str, Any]: the query JSON response
     """
-    LOGGER.info(f"Executing Molecular Formula Search query: {url}")
+    LOGGER.debug(f"Query url: {url}")
     r = requests.get(url, headers=MolecularFormulaSearch.HEADERS)
     r.raise_for_status()
     try:
@@ -282,3 +262,40 @@ def _poll_async_query_results(listkey: str, poll_interval: int = 10):
             LOGGER.info("Query is done.")
 
     return result
+
+
+def _retrieve_async_query_results(
+    listkey: str, properties: list[str] | None, max_results: int, max_query_results: int
+):
+    LOGGER.info("Retrieving async search results.")
+    values = []
+    for i in tqdm(range(0, max_results, max_query_results)):
+        url = _get_rest_polling_url(
+            listkey, properties, results_start=i, max_results=max_query_results
+        )
+        try:
+            results = _send_rest_query(url)
+        except HTTPError as exc:
+            LOGGER.debug(f"error while retrieving async query results: {exc}")
+            break
+
+        chunk = None
+        if "IdentifierList" in results:
+            chunk = results["IdentifierList"]["CID"]
+        elif "PropertyTable" in results and "Properties" in results["PropertyTable"]:
+            chunk = results["PropertyTable"]["Properties"]
+        else:
+            break
+
+        values.extend(chunk)
+        if len(chunk) < max_query_results:
+            LOGGER.info(f"Retrieved all results.")
+            break
+
+    df = None
+    if values:
+        if properties:
+            df = pd.DataFrame(values).set_index("CID")
+        else:
+            df = pd.DataFrame(values, columns=("CID",)).set_index("CID")
+    return df
