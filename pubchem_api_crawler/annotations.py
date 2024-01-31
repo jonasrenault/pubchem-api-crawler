@@ -33,14 +33,15 @@ class Annotations:
         Returns:
             pd.DataFrame: result dataframe
         """
-        assert are_compound_properties_valid(
-            properties
-        ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
+        if properties:
+            assert are_compound_properties_valid(
+                properties
+            ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
 
         annotations = self._get_annotation(heading)
         df = _annotations_to_df(annotations)
         if properties:
-            df = _get_properties_for_cids(df, properties, max_cids=50)
+            df = _get_properties_for_cids(df, properties)
         return df
 
     def _get_annotation(self, heading: str) -> list[dict[str, Any]]:
@@ -144,7 +145,7 @@ def _parse_annotations_data(data: dict[str, Any]) -> dict[str, str]:
 
 
 def _get_properties_for_cids(
-    df: pd.DataFrame, properties: list[str], max_cids: int = 50000
+    df: pd.DataFrame, properties: list[str], max_cids: int = 20000
 ) -> pd.DataFrame:
     """
     Get compound properties for cids in given dataframe.

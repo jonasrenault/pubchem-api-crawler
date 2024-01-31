@@ -1,3 +1,4 @@
+from json import JSONDecodeError
 import logging
 import time
 import urllib.parse
@@ -30,9 +31,10 @@ class MolecularFormulaSearch:
         self,
         atoms: list[str],
         allow_other_elements: bool = False,
-        properties: list[str] = None,
+        properties: list[str] | None = None,
         max_results: int = 2000000,
         _async: bool = False,
+        async_max_query_results: int = 50000,
     ) -> pd.DataFrame | None:
         """
         Perform a fast molecular formula search using PubChem API.
@@ -52,6 +54,7 @@ class MolecularFormulaSearch:
             properties (list[str]): list of compound properties to retrieve
             max_results (int, optional): max results. Defaults to 2000000.
             _async (bool, optional): use async REST API. Default to False.
+            async_max_query_results (int, optional): max results per query for async search. Defaults to 50000.
 
         Returns:
             pd.DataFrame | None: a pandas DataFrame with search results; None if no results
@@ -60,13 +63,18 @@ class MolecularFormulaSearch:
             atoms
         ), "Invalid list of atoms given. See https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf for valid molecular formula search inputs."
 
-        assert are_compound_properties_valid(
-            properties
-        ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
+        if properties:
+            assert are_compound_properties_valid(
+                properties
+            ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
 
         if _async:
             return self._async_search(
-                atoms, allow_other_elements, properties, max_results
+                atoms,
+                allow_other_elements,
+                properties,
+                max_results,
+                async_max_query_results,
             )
 
         try:
@@ -124,7 +132,7 @@ class MolecularFormulaSearch:
         allow_other_elements: bool,
         properties: list[str] | None,
         max_results: int,
-        max_query_results: int = 50000,
+        max_query_results: int,
     ):
         url = _get_rest_query_url(
             atoms, allow_other_elements, properties, max_results, True
@@ -139,8 +147,7 @@ class MolecularFormulaSearch:
             )
             return None
 
-        poll_results = _poll_async_query_results(listkey)
-        LOGGER.debug(f"Polling results: {poll_results}")
+        _poll_async_query_results(listkey)
 
         return _retrieve_async_query_results(
             listkey, properties, max_results, max_query_results
@@ -262,7 +269,15 @@ def _retrieve_async_query_results(
         try:
             results = _send_rest_query(url)
         except HTTPError as exc:
-            LOGGER.debug(f"error while retrieving async query results: {exc}")
+            LOGGER.error(f"error while retrieving async query results: {exc}")
+            break
+        except JSONDecodeError as exc:
+            LOGGER.error(
+                f"error while reading async query results: {exc}. "
+                "This is probably due to fetching too many results at a time, "
+                "try setting async_max_query_results param lower. "
+                "Current results will be partial"
+            )
             break
 
         chunk = None
