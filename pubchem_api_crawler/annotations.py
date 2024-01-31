@@ -4,10 +4,12 @@ from itertools import product
 from typing import Any
 
 import pandas as pd
+from requests import HTTPError
 from tqdm import tqdm
 
 from pubchem_api_crawler.molecular_search import MolecularFormulaSearch
 from pubchem_api_crawler.rest_api import _send_rest_query
+from pubchem_api_crawler.utils import are_compound_properties_valid
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +33,10 @@ class Annotations:
         Returns:
             pd.DataFrame: result dataframe
         """
+        assert are_compound_properties_valid(
+            properties
+        ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
+
         annotations = self._get_annotation(heading)
         df = _annotations_to_df(annotations)
         if properties:
@@ -51,8 +57,16 @@ class Annotations:
         url = Annotations.PUGVIEW_ANNOTATIONS_URL + "?" + urllib.parse.urlencode(params)
         results = []
 
-        LOGGER.info(f"Getting {heading} annotation.")
-        res = _send_rest_query(url)
+        LOGGER.info(f"Getting {heading} annotations.")
+        try:
+            res = _send_rest_query(url)
+        except HTTPError as exc:
+            if "PUGVIEW.NotFound" in exc.response.text:
+                LOGGER.error(
+                    f"PubChem was unable to find the requested heading. Check available headings at https://pubchem.ncbi.nlm.nih.gov/rest/pug/annotations/headings/JSON."
+                )
+            raise exc
+
         annotations = res["Annotations"]["Annotation"]
         total_pages = res["Annotations"]["TotalPages"]
         page = res["Annotations"]["Page"]

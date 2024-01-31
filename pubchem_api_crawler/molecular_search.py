@@ -7,7 +7,10 @@ from requests import HTTPError
 from tqdm import tqdm
 
 from pubchem_api_crawler.rest_api import _send_rest_query
-from pubchem_api_crawler.utils import is_molecular_formula_input_valid
+from pubchem_api_crawler.utils import (
+    is_molecular_formula_input_valid,
+    are_compound_properties_valid,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +60,10 @@ class MolecularFormulaSearch:
             atoms
         ), "Invalid list of atoms given. See https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf for valid molecular formula search inputs."
 
+        assert are_compound_properties_valid(
+            properties
+        ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
+
         if _async:
             return self._async_search(
                 atoms, allow_other_elements, properties, max_results
@@ -101,12 +108,12 @@ class MolecularFormulaSearch:
 
         if "IdentifierList" in results:
             cids = results["IdentifierList"]["CID"]
-            df = pd.DataFrame(cids, columns=("CID",)).set_index("CID")
+            df = pd.DataFrame(cids, columns=("CID",))
             return df
 
         if "PropertyTable" in results and "Properties" in results["PropertyTable"]:
             props = results["PropertyTable"]["Properties"]
-            df = pd.DataFrame(props).set_index("CID")
+            df = pd.DataFrame(props)
             return df
 
         return None
@@ -274,7 +281,7 @@ def _retrieve_async_query_results(
     df = None
     if values:
         if properties:
-            df = pd.DataFrame(values).set_index("CID")
+            df = pd.DataFrame(values)
         else:
-            df = pd.DataFrame(values, columns=("CID",)).set_index("CID")
+            df = pd.DataFrame(values, columns=("CID",))
     return df
