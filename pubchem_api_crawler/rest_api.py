@@ -15,7 +15,7 @@ HEADERS = {
 }
 
 
-def _send_rest_query(url: str) -> dict[str, Any]:
+def _send_rest_query(url: str, post_data: Any | None = None) -> dict[str, Any]:
     """
     Send REST API query
 
@@ -26,7 +26,10 @@ def _send_rest_query(url: str) -> dict[str, Any]:
         dict[str, Any]: the query JSON response
     """
     LOGGER.debug(f"Query url: {url}")
-    r = requests.get(url, headers=HEADERS)
+    if post_data:
+        r = requests.post(url, headers=HEADERS, data=post_data)
+    else:
+        r = requests.get(url, headers=HEADERS)
     r.raise_for_status()
     try:
         LOGGER.debug(r.headers["X-Throttling-Control"])
