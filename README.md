@@ -30,6 +30,27 @@ For example, if you wanted to find all compounds on PubChem containing carbon, h
 df = MolecularFormulaSearch().search(["C1-", "H1-", "B1-", "Al1-"], allow_other_elements=False, properties=["MolecularFormula", "CanonicalSMILES"])
 ```
 
+|    |       CID | MolecularFormula   | CanonicalSMILES                                                       |
+|---:|----------:|:-------------------|:----------------------------------------------------------------------|
+|  0 | 168084494 | CH5AlB2            | [BH].[BH].C[Al]                                                       |
+|  1 | 163556649 | C16H14AlB          | [B]CCC1=C2CCC=CC2=C(C3=CC=CC=C31)[Al]                                 |
+|  2 | 161576177 | C27H30AlB          | [H+].[B-](C1=CC=CC=C1)(C2=CC=CC=C2)(C3=CC=CC=C3)C4=CC=CC=C4.C[Al](C)C |
+|  3 | 160352291 | C6H15AlB           | [B].CC[Al](CC)CC                                                      |
+|  4 | 159123289 | C10H28AlB2         | [B](C)C.[B](C)C.CCCC.C[Al]C                                           |
+|  5 | 158802573 | C11H29AlB          | B(C)(C)C.CCCC.CC[Al]CC                                                |
+|  6 | 158250967 | C3H9AlB            | [B].C[Al](C)C                                                         |
+|  7 | 158044531 | C2H6AlB            | [B].C[Al]C                                                            |
+|  8 | 157093180 | C3H9AlB            | B(C)(C)C.[Al]                                                         |
+|  9 | 156888304 | C12H14AlB          | [B]C1=CC=CC=C1C2CCCCC2[Al]                                            |
+| 10 | 129859217 | C2H6AlB            | [B].C[Al]C                                                            |
+| 11 | 129657578 | C2H6AlB            | [B-].C[Al+]C                                                          |
+| 12 | 129657197 | CH3AlB2            | [B-].[B-].C[Al+2]                                                     |
+| 13 |  59992955 | C7H9AlB            | [BH2].C1=CC=C(C=C1)C[Al]                                              |
+| 14 |  22996618 | C12H30AlB          | B(CC)(CC)CC.CC[Al](CC)CC                                              |
+| 15 |  19734271 | C8H18AlB           | [B-].CC(C)C[Al+]CC(C)C                                                |
+| 16 | 155575130 | C8H8AlB            | [B]C1=CC(=C(C=C1C)[Al])C                                              |
+
+
 #### Molecular Formula Search Input
 
 The valid inputs for Molecular Formula Search are described [here](https://pubchem.ncbi.nlm.nih.gov/search/help_search.html#Mf).

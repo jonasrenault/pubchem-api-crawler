@@ -68,20 +68,23 @@ class MolecularFormulaSearch:
                 properties
             ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
 
-        if _async:
-            return self._async_search(
-                atoms,
-                allow_other_elements,
-                properties,
-                max_results,
-                async_max_query_results,
-            )
-
         try:
+            if _async:
+                return self._async_search(
+                    atoms,
+                    allow_other_elements,
+                    properties,
+                    max_results,
+                    async_max_query_results,
+                )
+
             return self._rest_api_search(
                 atoms, allow_other_elements, properties, max_results
             )
         except HTTPError as exc:
+            if "Search returned no hits" in exc.response.text:
+                LOGGER.warning("Your search returned no hits.")
+                return None
             if "PUGREST.Timeout" in exc.response.text:
                 LOGGER.error(
                     "Timeout error for REST API Molecular Search Query. You should try using the async REST API with _async=True."
