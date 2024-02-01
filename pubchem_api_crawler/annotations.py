@@ -80,7 +80,7 @@ class Annotations:
         if not dfs:
             LOGGER.error(f"Unable to get any {heading} annotations for provided ids.")
             return None
-        return pd.concat(dfs).fillna(value=np.nan)
+        return pd.concat(dfs).fillna(value=np.nan).reset_index()
 
     def get_annotations(
         self, heading: str, properties: list[str] | None = None
