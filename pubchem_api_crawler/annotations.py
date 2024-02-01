@@ -27,7 +27,7 @@ class Annotations:
 
     def get_compound_annotations(
         self,
-        cids: pd.DataFrame | Iterable[int],
+        cids: pd.DataFrame | Iterable[int] | int,
         heading: str = "Experimental Properties",
     ) -> pd.DataFrame | None:
         """
@@ -35,7 +35,7 @@ class Annotations:
         can be given.
 
         Args:
-            cids (pd.DataFrame | Iterable[int]): list of cids or dataframe containing a cid column
+            cids (pd.DataFrame | Iterable[int] | int): list of cids or dataframe containing a cid column
             heading (str, optional): annotation heading to get. Defaults to "Experimental Properties".
 
         Raises:
@@ -49,7 +49,10 @@ class Annotations:
                 raise ValueError("Input dataframe must have a CID column.")
             cids = set(cids["CID"].values)
         else:
-            cids = set(cids)
+            if not isinstance(cids, Iterable):
+                cids = {cids}
+            else:
+                cids = set(cids)
 
         dfs = []
         params = {"heading": heading}
