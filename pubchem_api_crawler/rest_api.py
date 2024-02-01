@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from ratelimit import limits, sleep_and_retry
 
 import requests
 
@@ -15,6 +16,8 @@ HEADERS = {
 }
 
 
+@sleep_and_retry
+@limits(calls=5, period=5)
 def _send_rest_query(url: str, post_data: Any | None = None) -> dict[str, Any]:
     """
     Send REST API query

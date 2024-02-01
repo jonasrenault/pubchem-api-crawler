@@ -1,8 +1,11 @@
 import logging
 import urllib.parse
+from collections import defaultdict
+from collections.abc import Iterable
 from itertools import product
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from requests import HTTPError
 from tqdm import tqdm
@@ -18,13 +21,56 @@ class Annotations:
     PUGVIEW_ANNOTATIONS_URL = (
         "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/annotations/heading/JSON"
     )
+    PUGVIEW_COMPOUND_ANNOTATIONS_URL = (
+        "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/"
+    )
+
+    def get_compound_annotations(
+        self,
+        cids: pd.DataFrame | Iterable[int],
+        heading: str = "Experimental Properties",
+    ) -> pd.DataFrame | None:
+        if isinstance(cids, pd.DataFrame):
+            if "CID" not in cids.columns:
+                raise ValueError("Input dataframe must have a CID column.")
+            cids = set(cids["CID"].values)
+        else:
+            cids = set(cids)
+
+        dfs = []
+        params = {"heading": heading}
+        LOGGER.info(f"Getting {heading} annotations for compounds.")
+        for cid in tqdm(cids):
+            try:
+                url = f"{Annotations.PUGVIEW_COMPOUND_ANNOTATIONS_URL}{str(cid)}/JSON?{urllib.parse.urlencode(params)}"
+                results = _send_rest_query(url)
+            except HTTPError as exc:
+                if "PUGVIEW.NotFound" in exc.response.text:
+                    LOGGER.debug(
+                        f"No data on PubChem for cid {cid} and heading {heading}."
+                    )
+                else:
+                    LOGGER.warning(
+                        f"An error occured while fetching data for cid {cid} and heading {heading}: {exc.response.text}"
+                    )
+                continue
+            data = _extract_compound_annotations(results)
+            df = pd.DataFrame.from_dict(data, orient="index").stack().to_frame()
+            df = pd.DataFrame(df[0].values.tolist(), index=df.index)
+            df.loc["CID", :] = cid
+            dfs.append(df.transpose())
+
+        if not dfs:
+            LOGGER.error(f"Unable to get any {heading} annotations for provided ids.")
+            return None
+        return pd.concat(dfs).fillna(value=np.nan)
 
     def get_annotations(
         self, heading: str, properties: list[str] | None = None
     ) -> pd.DataFrame:
         """
         Get all annotations available on PubChem for given annotation heading,
-        and fetch additionnal compound properties for the results
+        and optionally fetch additionnal compound properties for the results.
 
         Args:
             heading (str): the annotation heading
@@ -38,13 +84,13 @@ class Annotations:
                 properties
             ), "Invalid list of properties given. See https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest#section=Compound-Property-Tables for list of compound properties."
 
-        annotations = self._get_annotation(heading)
+        annotations = self._get_annotations(heading)
         df = _annotations_to_df(annotations)
         if properties:
             df = _get_properties_for_cids(df, properties)
         return df
 
-    def _get_annotation(self, heading: str) -> list[dict[str, Any]]:
+    def _get_annotations(self, heading: str) -> list[dict[str, Any]]:
         """
         Get all anotations available on PubChem for given annotation heading.
 
@@ -135,8 +181,9 @@ def _parse_annotations_data(data: dict[str, Any]) -> dict[str, str]:
         )
     elif "Number" in data["Value"]:
         value["Value"] = "; ".join(map(str, data["Value"]["Number"]))
-        if "Unit" in data["Value"]:
-            value["Value"] += " " + data["Value"]["Unit"]
+
+    if "Unit" in data["Value"] and "Value" in value:
+        value["Value"] += " " + data["Value"]["Unit"]
 
     if "Reference" in data:
         value["Reference"] = "\n".join(data["Reference"])
@@ -177,3 +224,35 @@ def _get_properties_for_cids(
 
     LOGGER.info("Done retrieving properties.")
     return df.merge(pd.DataFrame(prop_values), how="right", on="CID")
+
+
+def _extract_compound_annotations(data: dict[str, Any]):
+    top_section = data["Record"]["Section"][0]
+    sections = _parse_section(top_section)
+    data = defaultdict(lambda: defaultdict(list))
+    for section in sections:
+        if "Value" in section:
+            data[section["heading"]]["Value"].append(section["Value"])
+        if "Reference" in section:
+            data[section["heading"]]["Reference"].append(section["Reference"])
+
+    return data
+
+
+def _parse_section(section: dict[str, Any]) -> list[dict[str, Any]]:
+    if "Information" in section:
+        return [
+            {"heading": section["TOCHeading"], **_parse_annotations_data(info)}
+            for info in section["Information"]
+        ]
+    if "Section" in section:
+        subsections = []
+        for subsection in section["Section"]:
+            subsections.extend(_parse_section(subsection))
+        return subsections
+    return []
+
+
+if __name__ == "__main__":
+    an = Annotations()
+    print(an.get_compound_annotations(6403))
