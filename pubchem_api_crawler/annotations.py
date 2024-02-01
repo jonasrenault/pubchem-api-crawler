@@ -30,6 +30,20 @@ class Annotations:
         cids: pd.DataFrame | Iterable[int],
         heading: str = "Experimental Properties",
     ) -> pd.DataFrame | None:
+        """
+        Get annotations for given list of cids. A specific annotation heading
+        can be given.
+
+        Args:
+            cids (pd.DataFrame | Iterable[int]): list of cids or dataframe containing a cid column
+            heading (str, optional): annotation heading to get. Defaults to "Experimental Properties".
+
+        Raises:
+            ValueError: if dataframe does not have a CID column
+
+        Returns:
+            pd.DataFrame | None: annotations for given cids
+        """
         if isinstance(cids, pd.DataFrame):
             if "CID" not in cids.columns:
                 raise ValueError("Input dataframe must have a CID column.")

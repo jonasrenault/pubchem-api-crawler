@@ -11,6 +11,7 @@ requests = "^2.31.0"
 pandas = "^2.2.0"
 tqdm = "^4.66.1"
 ratelimit = "^2.2.1"
+pydantic-settings = "^2.1.0"
 
 
 [tool.poetry.group.dev.dependencies]
