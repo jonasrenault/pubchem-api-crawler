@@ -80,7 +80,7 @@ class Annotations:
         if not dfs:
             LOGGER.error(f"Unable to get any {heading} annotations for provided ids.")
             return None
-        return pd.concat(dfs).fillna(value=np.nan).reset_index()
+        return pd.concat(dfs).fillna(value=np.nan).reset_index(drop=True)
 
     def get_annotations(
         self, heading: str, properties: list[str] | None = None
@@ -127,7 +127,8 @@ class Annotations:
         except HTTPError as exc:
             if "PUGVIEW.NotFound" in exc.response.text:
                 LOGGER.error(
-                    f"PubChem was unable to find the requested heading. Check available headings at https://pubchem.ncbi.nlm.nih.gov/rest/pug/annotations/headings/JSON."
+                    "PubChem was unable to find the requested heading. "
+                    "Check available headings at https://pubchem.ncbi.nlm.nih.gov/rest/pug/annotations/headings/JSON."
                 )
             raise exc
 
@@ -243,7 +244,19 @@ def _get_properties_for_cids(
     return df.merge(pd.DataFrame(prop_values), how="right", on="CID")
 
 
-def _extract_compound_annotations(data: dict[str, Any]):
+def _extract_compound_annotations(
+    data: dict[str, Any]
+) -> dict[str, dict[str, list[str]]]:
+    """
+    Parse annotations for a compound returned by PubChem PUG View API
+    into a dict.
+
+    Args:
+        data (dict[str, Any]): the annotations
+
+    Returns:
+        dict[str, dict[str, list[str]]]: the parsed dict
+    """
     top_section = data["Record"]["Section"][0]
     sections = _parse_section(top_section)
     data = defaultdict(lambda: defaultdict(list))
@@ -257,6 +270,15 @@ def _extract_compound_annotations(data: dict[str, Any]):
 
 
 def _parse_section(section: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Parse a section and its subsections
+
+    Args:
+        section (dict[str, Any]): the section
+
+    Returns:
+        list[dict[str, Any]]: the parsed data
+    """
     if "Information" in section:
         return [
             {"heading": section["TOCHeading"], **_parse_annotations_data(info)}
@@ -268,8 +290,3 @@ def _parse_section(section: dict[str, Any]) -> list[dict[str, Any]]:
             subsections.extend(_parse_section(subsection))
         return subsections
     return []
-
-
-if __name__ == "__main__":
-    an = Annotations()
-    print(an.get_compound_annotations(6403))
