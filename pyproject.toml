@@ -1,9 +1,13 @@
 [tool.poetry]
 name = "pubchem-api-crawler"
-version = "0.1.0"
+version = "1.0.0"
 description = "PubChem REST API crawler to retrieve compound properties using a molecular formula search"
 authors = ["Jonas Renault <jonasrenault@gmail.com>"]
 readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/jonasrenault/pubchem-api-crawler"
+repository = "https://github.com/jonasrenault/pubchem-api-crawler"
+keywords = ["pubchem", "crawler", "chemistry", "molecular-formula"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
