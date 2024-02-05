@@ -1,0 +1,34 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+env: # environment variables (available in any part of the action)
+  PYTHON_VERSION: 3.11
+
+jobs:
+  publish:
+    name: Build and Publish to PyPI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "poetry"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Login to PyPI
+        run: poetry config pypi-token.pypi "${{ secrets.PYPI_API_KEY }}"
+
+      - name: Publish package
+        run: poetry publish --build
