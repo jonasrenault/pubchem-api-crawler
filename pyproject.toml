@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pubchem-api-crawler"
-version = "1.0.2"
+version = "1.0.3"
 description = "PubChem REST API crawler to retrieve compound properties using a molecular formula search"
 authors = ["Jonas Renault <jonasrenault@gmail.com>"]
 readme = "README.md"
