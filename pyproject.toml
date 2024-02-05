@@ -7,7 +7,7 @@ readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/jonasrenault/pubchem-api-crawler"
 repository = "https://github.com/jonasrenault/pubchem-api-crawler"
-keywords = ["pubchem", "crawler", "chemistry", "molecular-formula"]
+keywords = ["pubchem", "crawler", "chemistry", "molecular-formula", "data-mining"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
