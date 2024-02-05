@@ -4,7 +4,13 @@ This package provides a python client for crawling chemical compounds and their 
 
 ## Installation
 
-You can install the project locally using [poetry](https://python-poetry.org/) with
+You can install the PubChem API Crawler directly with pip :
+
+```console
+pip install pubchem-api-crawler
+```
+
+Or you can clone the project from github and install it locally using [poetry](https://python-poetry.org/) with
 
 ```console
 poetry install
@@ -27,6 +33,7 @@ The main entry point for PubChem API Crawler is the [Molecular Formula Search fu
 For example, if you wanted to find all compounds on PubChem containing carbon, hydrogen, aluminium and bore, you would use :
 
 ```python
+from pubchem_api_crawler import MolecularFormulaSearch
 df = MolecularFormulaSearch().search(["C1-", "H1-", "B1-", "Al1-"], allow_other_elements=False, properties=["MolecularFormula", "CanonicalSMILES"])
 ```
 
@@ -102,7 +109,7 @@ PubChem API Crawler offers two ways to get annotations. You can get annotations 
 The `get_compound_annotations` method will get a specific annotation heading for the given cids (if heading is unspecified, it will get the `Experimental Properties` section).
 
 ```python
-from pubchem_api_crawler.annotations import Annotations
+from pubchem_api_crawler import Annotations
 Annotations().get_compound_annotations(356, heading='Heat of Combustion')
 ```
 
@@ -115,7 +122,7 @@ Annotations().get_compound_annotations(356, heading='Heat of Combustion')
 The `get_annotations` method will get all available data on PubChem for a given heading.
 
 ```python
-from pubchem_api_crawler.annotations import Annotations
+from pubchem_api_crawler import Annotations
 Annotations().get_annotations("Autoignition Temperature")
 ```
 
