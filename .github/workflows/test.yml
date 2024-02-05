@@ -6,8 +6,6 @@ on:
   push:
     branches:
       - main
-  # Replace pull_request with pull_request_target if you
-  # plan to use this action with forks, see the Limitations section
   pull_request:
     branches:
       - main
@@ -17,7 +15,7 @@ env: # environment variables (available in any part of the action)
 
 jobs:
   test:
-    name: Run backend unit tests
+    name: Run tests
     runs-on: ubuntu-latest
     steps:
       - name: Git checkout
